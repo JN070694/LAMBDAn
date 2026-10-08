@@ -1,0 +1,236 @@
+import { useEffect, useRef } from 'react';
+import { useStore } from '@/store';
+import type { ShuffledQuestion } from '@/types';
+import { gamepadPoller } from './gamepadPoller';
+import { openExpandedViewer } from './expandWindow';
+
+/**
+ * In-quiz gamepad controls.
+ * - D-pad / left stick up/down: move focus between answer options
+ * - A (mapped: select): confirm/select focused option, or advance once answered
+ * - B (mapped: back): close media/refs overlay, or prompt to quit
+ * - X (mapped: skipCorrect): skip + mark correct
+ * - Y (mapped: skipIncorrect): skip + mark incorrect
+ * - LB (mapped: media): toggle media panel
+ * - RB (mapped: references): toggle refs panel
+ * - LS (mapped: ls): while media panel is open, expand current image into its own window
+ * - RS (mapped: rs): while refs panel is open, expand current image into its own window
+ * - Start (mapped: pause): toggle pause
+ * - Select/View (mapped: score): toggle score display
+ *
+ * The mapping is sourced entirely from Settings > Gamepad. It's read fresh
+ * from the store on every poll tick via useStore.getState() rather than
+ * through React's render cycle, so a remap takes effect immediately and
+ * unconditionally everywhere — not just wherever happens to re-render.
+ * The navigation direction handling (D-pad / left stick) is fixed and not
+ * configurable.
+ *
+ * IMPORTANT: `opts` is read through a ref (optsRef) and the poller
+ * subscription happens exactly once (empty effect deps). Do NOT add opts
+ * fields back into the effect's dependency array — callers pass inline
+ * callbacks (e.g. onToggleScore, onResume) that get a new identity every
+ * render, and resubscribing gamepadPoller on every render was the root
+ * cause of a real bug: it briefly drops the listener count to 0, which
+ * reset the poller's held-button tracking, making a still-held button
+ * (e.g. holding RS to expand a reference image) look "freshly pressed"
+ * again on the next ~16ms tick — spawning a new expanded-viewer window
+ * every tick for as long as the button was held.
+ */
+
+interface UseQuizGamepadOptions {
+  optionFocusIndex: number;
+  setOptionFocusIndex: (i: number) => void;
+  optionCount: number;
+  /** The question actually on screen right now. Passed in rather than derived from
+   * session.questions[session.currentIndex], because Until Correct mode advances
+   * through its own local queue and never moves session.currentIndex — deriving it
+   * internally would silently freeze the gamepad on the first question in that mode. */
+  currentQuestion: ShuffledQuestion | null;
+  /** Records an answer for a question. In Until Correct mode this must route through
+   * the mode's own bookkeeping (mastered set, attempt count) rather than writing to
+   * the session store directly, or gamepad-driven answers won't be tracked. */
+  onAnswer: (questionId: string, value: string) => void;
+  onSelectFocused: () => void;
+  onAdvance: () => void;
+  onToggleScore?: () => void;
+  onResume?: () => void;
+  onQuitRequest?: () => void;
+  pauseMenuIndex?: number;
+  setPauseMenuIndex?: (i: number) => void;
+  /** When true, this hook does nothing — use while a modal (e.g. quit-confirm) is
+   * up front-and-center, so it doesn't fight with that modal's own input handling. */
+  suppressed?: boolean;
+}
+
+export function useQuizGamepad(opts: UseQuizGamepadOptions) {
+  const lastAxisDir = useRef(0);
+  const lastAxisTime = useRef(0);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+
+  useEffect(() => {
+    return gamepadPoller.subscribe(state => {
+      if (!state.connected) return;
+      const opts = optsRef.current;
+      if (opts.suppressed) return;
+      const { justPressed, axes } = state;
+
+      const store = useStore.getState();
+      const { session, gamepadMapping } = store;
+      if (!session.quiz || session.finished) return;
+
+      const m = gamepadMapping;
+      const q = opts.currentQuestion;
+
+      // Pause toggles regardless of other state
+      if (justPressed(m.pause)) {
+        store.setPaused(!session.paused);
+        return;
+      }
+      if (session.paused) {
+        if (justPressed(m.back) || justPressed(m.pause)) {
+          if (opts.onResume) opts.onResume();
+        }
+        const axisX = axes[0] ?? 0;
+        if (justPressed(14) || axisX < -0.5) {
+          if (opts.setPauseMenuIndex) opts.setPauseMenuIndex(0);
+        } else if (justPressed(15) || axisX > 0.5) {
+          if (opts.setPauseMenuIndex) opts.setPauseMenuIndex(1);
+        }
+        if (justPressed(m.select)) {
+          if ((opts.pauseMenuIndex ?? 0) === 0) {
+            if (opts.onResume) opts.onResume();
+          } else {
+            if (opts.onQuitRequest) opts.onQuitRequest();
+          }
+        }
+        return;
+      }
+
+      if (justPressed(m.media)) { store.toggleMedia(); return; }
+      if (justPressed(m.references)) { store.toggleRefs(); return; }
+
+      if (justPressed(m.score) && opts.onToggleScore) {
+        opts.onToggleScore();
+        return;
+      }
+
+      if (justPressed(m.back)) {
+        if (session.mediaOpen) { store.closeMedia(); return; }
+        if (session.refsOpen) { store.closeRefs(); return; }
+        if (opts.onQuitRequest) opts.onQuitRequest();
+        return;
+      }
+
+      if (!q) return;
+
+      // Overlay navigation (media variant / ref index) via D-pad left/right
+      if (session.mediaOpen) {
+        if (justPressed(m.ls)) {
+          if (q.nidVariants.length > 0 && session.quiz) {
+            openExpandedViewer({
+              type: 'media', quizId: session.quiz.id, questionId: q.id,
+              index: session.mediaVariantIndex,
+            });
+          }
+          return;
+        }
+        const axisX = axes[0] ?? 0;
+        const left = justPressed(14) || (axisX < -0.5 && lastAxisDir.current >= 0);
+        const right = justPressed(15) || (axisX > 0.5 && lastAxisDir.current <= 0);
+        if (left && session.mediaVariantIndex > 0) store.setMediaVariant(session.mediaVariantIndex - 1);
+        else if (right && session.mediaVariantIndex < q.nidVariants.length - 1) store.setMediaVariant(session.mediaVariantIndex + 1);
+        lastAxisDir.current = axisX < -0.5 ? -1 : axisX > 0.5 ? 1 : 0;
+        return;
+      }
+      if (session.refsOpen) {
+        const refs = session.quiz?.referenceImages ?? [];
+        if (justPressed(m.rs)) {
+          if (refs.length > 0 && session.quiz) {
+            openExpandedViewer({
+              type: 'refs', quizId: session.quiz.id,
+              index: session.refIndex,
+            });
+          }
+          return;
+        }
+        const axisX = axes[0] ?? 0;
+        const left = justPressed(14) || (axisX < -0.5 && lastAxisDir.current >= 0);
+        const right = justPressed(15) || (axisX > 0.5 && lastAxisDir.current <= 0);
+        if (left && session.refIndex > 0) store.setRefIndex(session.refIndex - 1);
+        else if (right && session.refIndex < refs.length - 1) store.setRefIndex(session.refIndex + 1);
+        lastAxisDir.current = axisX < -0.5 ? -1 : axisX > 0.5 ? 1 : 0;
+        return;
+      }
+
+      const answered = session.answers[q.id] !== undefined;
+
+      // ── D-pad / stick navigation ────────────────────────────────────────
+      // Essays with show answer: LEFT/RIGHT moves between Correct(0)/Incorrect(1)
+      // MC/TF: UP/DOWN moves between answer options
+      const axisY = axes[1] ?? 0;
+      const now = Date.now();
+      const REPEAT_DELAY = 200;
+      const THRESHOLD = 0.5;
+
+      let dir = 0;
+      if (justPressed(12) || (axisY < -THRESHOLD && lastAxisDir.current >= 0)) dir = -1;
+      else if (justPressed(13) || (axisY > THRESHOLD && lastAxisDir.current <= 0)) dir = 1;
+      const axisActive = Math.abs(axisY) > THRESHOLD;
+      const canRepeat = now - lastAxisTime.current > REPEAT_DELAY;
+
+      if (q.questionType === 'ESSAY' && session.showAnswer && !answered) {
+        const axisX = axes[0] ?? 0;
+        const leftPressed = justPressed(14) || (axisX < -0.5 && lastAxisDir.current >= 0);
+        const rightPressed = justPressed(15) || (axisX > 0.5 && lastAxisDir.current <= 0);
+        const axisXActive = Math.abs(axisX) > 0.5;
+        const canRepeatX = now - lastAxisTime.current > REPEAT_DELAY;
+        if ((leftPressed || rightPressed) && (justPressed(14) || justPressed(15) || (axisXActive && canRepeatX))) {
+          opts.setOptionFocusIndex(leftPressed ? 0 : 1);
+          lastAxisTime.current = now;
+        }
+        lastAxisDir.current = axisXActive ? (axisX < 0 ? -1 : 1) : 0;
+      } else if (!answered && dir !== 0 && opts.optionCount > 0 &&
+          (justPressed(12) || justPressed(13) || (axisActive && canRepeat))) {
+        const next = Math.max(0, Math.min(opts.optionCount - 1, opts.optionFocusIndex + dir));
+        opts.setOptionFocusIndex(next);
+        lastAxisTime.current = now;
+        lastAxisDir.current = axisActive ? (axisY < 0 ? -1 : 1) : 0;
+      } else {
+        lastAxisDir.current = axisActive ? (axisY < 0 ? -1 : 1) : 0;
+      }
+
+      // ── Select / confirm ────────────────────────────────────────────────
+      if (justPressed(m.select)) {
+        if (answered) {
+          opts.onAdvance();
+        } else if (q.questionType === 'ESSAY') {
+          if (!session.showAnswer) {
+            store.setShowAnswer(true);
+            opts.setOptionFocusIndex(0); // default to Correct
+          } else {
+            if (opts.optionFocusIndex === 0) opts.onAnswer(q.id, 'CORRECT');
+            else opts.onAnswer(q.id, 'INCORRECT');
+          }
+        } else {
+          opts.onSelectFocused();
+        }
+      }
+
+      // Skip-mark buttons
+      if (q.questionType === 'ESSAY' && !answered) {
+        if (justPressed(m.skipCorrect)) {
+          if (!session.showAnswer) store.setShowAnswer(true);
+          opts.onAnswer(q.id, 'CORRECT');
+        }
+        if (justPressed(m.skipIncorrect)) {
+          if (!session.showAnswer) store.setShowAnswer(true);
+          opts.onAnswer(q.id, 'INCORRECT');
+        }
+      } else if (q.questionType !== 'ESSAY' && !answered) {
+        if (justPressed(m.skipCorrect)) opts.onAnswer(q.id, 'SKIP_CORRECT');
+        if (justPressed(m.skipIncorrect)) opts.onAnswer(q.id, 'SKIP_INCORRECT');
+      }
+    });
+  }, []);
+}
