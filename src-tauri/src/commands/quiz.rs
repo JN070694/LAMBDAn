@@ -199,7 +199,7 @@ pub async fn get_settings() -> std::result::Result<AppSettings, LambdanError> {
     let shuffle: bool = conn.query_row(
         "SELECT value FROM settings WHERE key='shuffle_questions'",
         [], |r| r.get::<_, String>(0),
-    ).map(|v| v == "true").unwrap_or(false);
+    ).map(|v| v == "true").unwrap_or(true);
     let until_correct: bool = conn.query_row(
         "SELECT value FROM settings WHERE key='until_correct_mode'",
         [], |r| r.get::<_, String>(0),
