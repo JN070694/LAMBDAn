@@ -22,7 +22,7 @@ const ACTIONS: { key: keyof GamepadMapping; label: string; note?: string }[] = [
   { key: 'references',    label: 'RB — References / Tab Right' },
   { key: 'lt',            label: 'LT — Page Left', note: 'main menus only' },
   { key: 'rt',            label: 'RT — Page Right', note: 'main menus only' },
-  { key: 'score',         label: 'Select/View — See Score', note: 'active quizzes only' },
+  { key: 'score',         label: 'Select/View — Not Assigned' },
   { key: 'pause',         label: 'Start — Pause', note: 'active quizzes only' },
   { key: 'ls',            label: 'LS — Expand Media', note: 'active quizzes, media panel open' },
   { key: 'rs',            label: 'RS — Expand References', note: 'active quizzes, refs panel open' },
