@@ -12,3 +12,16 @@ pub fn quit(sleep_guard: State<SleepGuard>) {
     sleep_guard.stop();
     std::process::exit(0);
 }
+
+/// Called by the frontend whenever a quiz starts or ends. While `active` is
+/// true the OS is kept from sleeping; when false the PC may sleep normally.
+/// A paused quiz still counts as active, so the frontend keeps this true
+/// while paused.
+#[tauri::command]
+pub fn set_sleep_inhibit(active: bool, sleep_guard: State<SleepGuard>) {
+    if active {
+        sleep_guard.engage();
+    } else {
+        sleep_guard.release();
+    }
+}
