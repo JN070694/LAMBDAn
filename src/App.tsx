@@ -30,6 +30,13 @@ export default function App() {
     ]).catch(console.error);
   }, []);
 
+  // Keep the PC awake only while a quiz is in progress. A paused quiz still
+  // counts as in progress; the end screen and the library do not.
+  const quizInProgress = session.quiz !== null && !session.finished;
+  useEffect(() => {
+    invoke('set_sleep_inhibit', { active: quizInProgress }).catch(console.error);
+  }, [quizInProgress]);
+
   const isWide = session.mediaOpen || session.refsOpen;
 
   return (
