@@ -152,11 +152,20 @@ function MetaRow({ question, typeLabels, answered, onAnswer }: {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(question.questionText);
+      // Essay questions copy just the question text. MC and TF questions copy
+      // the question followed by each option as "A) ...", "B) ..." etc., using
+      // the labels exactly as they are shown on screen (including shuffled order).
+      const text = question.questionType === 'ESSAY'
+        ? question.questionText
+        : [
+            question.questionText,
+            ...question.shuffledOptions.map(opt => `${opt.label}) ${opt.text}`),
+          ].join('\n');
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error('Failed to copy question text:', err);
+      console.error('Failed to copy question:', err);
     }
   };
 
@@ -178,7 +187,7 @@ function MetaRow({ question, typeLabels, answered, onAnswer }: {
         <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
           <button
             onClick={handleCopy}
-            title="Copy question text"
+            title={question.questionType === 'ESSAY' ? 'Copy question text' : 'Copy question and options'}
             style={{
               background: 'var(--white)', border: '1.5px solid var(--black)', borderRadius: 5,
               padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
