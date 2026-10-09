@@ -24,13 +24,14 @@ pub fn run() {
                     std::io::ErrorKind::Other, e.to_string()
                 )) as Box<dyn std::error::Error>)?;
 
-            // Held in managed state for the app's whole lifetime so the OS
-            // doesn't sleep/lock the screen out from under an active quiz.
-            // NOTE: this is not released just by the process "exiting" —
-            // see commands::app::quit and the window event handler below,
-            // both of which explicitly call .stop() on it before ever
-            // hard-exiting the process.
-            app.manage(sleep_guard::SleepGuard::start());
+            // Held in managed state for the app's whole lifetime. It starts
+            // idle (the PC may sleep normally) and the frontend turns it on
+            // only while a quiz is in progress, via `set_sleep_inhibit`.
+            // NOTE: a held lock is not released just by the process
+            // "exiting" — see commands::app::quit and the window event
+            // handler below, both of which explicitly call .stop() on it
+            // before ever hard-exiting the process.
+            app.manage(sleep_guard::SleepGuard::new());
 
             // Covers the OS window-close button (the X), which doesn't go
             // through our `quit` command. Without this, closing the window
@@ -51,6 +52,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::quit,
+            commands::app::set_sleep_inhibit,
             commands::import::import_pack,
             commands::quiz::get_folders,
             commands::quiz::create_folder,
