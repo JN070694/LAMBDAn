@@ -30,7 +30,7 @@ export default function QuestionCard({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {hasMedia && <MediaIndicator nid={question.nid} count={question.nidVariants.length} onOpen={toggleMedia} />}
-        <MetaRow question={question} typeLabels={typeLabels} answered={answered} onAnswer={onAnswer} />
+        <MetaRow question={question} typeLabels={typeLabels} answer={answer} onAnswer={onAnswer} />
         <p style={{ fontSize: 15, lineHeight: 1.65, fontWeight: 500 }}>{question.questionText}</p>
         {!session.showAnswer ? (
           <button className="btn btn-secondary" style={{ alignSelf: 'flex-start' }}
@@ -74,7 +74,7 @@ export default function QuestionCard({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {hasMedia && <MediaIndicator nid={question.nid} count={question.nidVariants.length} onOpen={toggleMedia} />}
-      <MetaRow question={question} typeLabels={typeLabels} answered={answered} onAnswer={onAnswer} />
+      <MetaRow question={question} typeLabels={typeLabels} answer={answer} onAnswer={onAnswer} />
       <p style={{ fontSize: 15, lineHeight: 1.65, fontWeight: 500 }}>{question.questionText}</p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -142,10 +142,10 @@ function MediaIndicator({ nid, count, onOpen }: { nid: string; count: number; on
   );
 }
 
-function MetaRow({ question, typeLabels, answered, onAnswer }: {
+function MetaRow({ question, typeLabels, answer, onAnswer }: {
   question: ShuffledQuestion;
   typeLabels: Record<string, string>;
-  answered: boolean;
+  answer: string | undefined;
   onAnswer: (ans: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -183,40 +183,44 @@ function MetaRow({ question, typeLabels, answered, onAnswer }: {
       <span className="pill">{typeLabels[question.questionType]}</span>
       {question.group && <span className="pill pill-muted">{question.group}</span>}
 
-      {!answered && (
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
-          <button
-            onClick={handleCopy}
-            title={question.questionType === 'ESSAY' ? 'Copy question text' : 'Copy question and options'}
-            style={{
-              background: 'var(--white)', border: '1.5px solid var(--black)', borderRadius: 5,
-              padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
-            }}>
-            {copied ? '✓ Copied' : '⧉ Copy'}
-          </button>
-          <button
-            onClick={() => onAnswer('SKIP_CORRECT')}
-            title="Skip and mark correct"
-            style={{
-              background: 'var(--white)', border: '1.5px solid var(--black)', borderRadius: 5,
-              padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
-            }}>
-            ✓ Skip
-          </button>
-          <button
-            onClick={() => onAnswer('SKIP_INCORRECT')}
-            title="Skip and mark incorrect"
-            style={{
-              background: 'var(--white)', border: '1.5px solid var(--black)', borderRadius: 5,
-              padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
-            }}>
-            ✗ Skip
-          </button>
-        </div>
-      )}
+      {/* Copy and the two Skip buttons stay available after answering, so an
+          answer can still be re-marked correct/incorrect before moving on. */}
+      <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <button
+          onClick={handleCopy}
+          title={question.questionType === 'ESSAY' ? 'Copy question text' : 'Copy question and options'}
+          style={{
+            background: 'var(--white)', border: '1.5px solid var(--black)', borderRadius: 5,
+            padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
+          }}>
+          {copied ? '✓ Copied' : '⧉ Copy'}
+        </button>
+        <button
+          onClick={() => onAnswer('SKIP_CORRECT')}
+          title="Skip and mark correct"
+          style={{
+            background: answer === 'SKIP_CORRECT' ? 'var(--black)' : 'var(--white)',
+            color: answer === 'SKIP_CORRECT' ? 'var(--white)' : 'inherit',
+            border: '1.5px solid var(--black)', borderRadius: 5,
+            padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
+          }}>
+          ✓ Skip
+        </button>
+        <button
+          onClick={() => onAnswer('SKIP_INCORRECT')}
+          title="Skip and mark incorrect"
+          style={{
+            background: answer === 'SKIP_INCORRECT' ? 'var(--black)' : 'var(--white)',
+            color: answer === 'SKIP_INCORRECT' ? 'var(--white)' : 'inherit',
+            border: '1.5px solid var(--black)', borderRadius: 5,
+            padding: '3px 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: 600,
+          }}>
+          ✗ Skip
+        </button>
+      </div>
     </div>
   );
 }
