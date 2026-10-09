@@ -164,11 +164,20 @@ export default function QuizView() {
   }, [finishSession]);
 
   const handleUntilCorrectAnswer = useCallback((q: ShuffledQuestion, ans: string) => {
+    // If this question was already answered, this is a re-mark (e.g. a Skip
+    // button pressed after answering): it replaces the earlier result instead
+    // of counting as a new attempt.
+    const isRemark = answers[q.id] !== undefined;
     setAnswer(q.id, ans);
     const correct = isCorrectAnswer(q, ans);
-    setAttemptCount(c => c + 1);
-    if (correct) setMasteredIds(prev => new Set(prev).add(q.id));
-  }, [setAnswer, isCorrectAnswer]);
+    if (!isRemark) setAttemptCount(c => c + 1);
+    setMasteredIds(prev => {
+      const nextSet = new Set(prev);
+      if (correct) nextSet.add(q.id);
+      else nextSet.delete(q.id);
+      return nextSet;
+    });
+  }, [setAnswer, isCorrectAnswer, answers]);
 
   const handleUntilCorrectNext = useCallback(() => {
     const q = queue[0];
