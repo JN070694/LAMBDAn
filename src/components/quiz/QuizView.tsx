@@ -26,7 +26,6 @@ export default function QuizView() {
 
   const [loading, setLoading] = useState(true);
   const [elapsed, setElapsed] = useState(0);
-  const [showScore, setShowScore] = useState(false);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
   const [optionFocusIndex, setOptionFocusIndex] = useState(0);
   const [pauseMenuIndex, setPauseMenuIndex] = useState(0);
@@ -74,7 +73,6 @@ export default function QuizView() {
   const handleRetakeQuiz = useCallback(() => {
     savingRef.current = false;
     setElapsed(0);
-    setShowScore(false);
     loadQuiz();
   }, [loadQuiz]);
 
@@ -236,7 +234,6 @@ export default function QuizView() {
     onAnswer: handleGamepadAnswer,
     onSelectFocused,
     onAdvance,
-    onToggleScore: () => setShowScore(v => !v),
     onResume: () => { setPaused(false); setPauseMenuIndex(0); },
     onQuitRequest: () => setShowQuitConfirm(true),
     pauseMenuIndex,
@@ -279,11 +276,11 @@ export default function QuizView() {
             <span style={{ background: 'var(--inverse-fg)', color: 'var(--inverse-bg)', borderRadius: 4, padding: '2px 8px', fontWeight: 700 }}>
               UNTIL CORRECT
             </span>
-            <button onClick={() => setShowScore(v => !v)}
-              style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4, cursor: 'pointer',
+            <span
+              style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4,
                 color: 'var(--inverse-fg)', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px' }}>
-              {showScore ? `${masteredCount} / ${totalUnique} mastered` : 'Score'}
-            </button>
+              {`Score: ${masteredCount} / ${totalUnique}`}
+            </span>
             <button onClick={() => setPaused(!paused)}
               style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4, cursor: 'pointer',
                 color: 'var(--inverse-fg)', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px' }}>
@@ -364,11 +361,11 @@ export default function QuizView() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px',
           fontFamily: 'var(--font-mono)', fontSize: 11 }}>
           <span style={{ color: 'var(--inverse-fg-muted)' }}>{formatTime(elapsed)}</span>
-          <button onClick={() => setShowScore(v => !v)}
-            style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4, cursor: 'pointer',
+          <span
+            style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4,
               color: 'var(--inverse-fg)', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px' }}>
-            {showScore ? `${correctCount} / ${answeredCount}` : 'Score'}
-          </button>
+            {`Score: ${correctCount} / ${answeredCount}`}
+          </span>
           <button onClick={() => setPaused(!paused)}
             style={{ background: 'none', border: '1px solid var(--inverse-fg)', borderRadius: 4, cursor: 'pointer',
               color: 'var(--inverse-fg)', fontFamily: 'var(--font-mono)', fontSize: 11, padding: '2px 8px' }}>
