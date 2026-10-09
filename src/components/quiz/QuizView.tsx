@@ -30,6 +30,9 @@ export default function QuizView() {
   const [optionFocusIndex, setOptionFocusIndex] = useState(0);
   const [pauseMenuIndex, setPauseMenuIndex] = useState(0);
   const savingRef = useRef(false);
+  // Pause bookkeeping: total time spent paused, and when the current pause began.
+  const pausedTotalMsRef = useRef(0);
+  const pauseStartedAtRef = useRef<number | null>(null);
 
   const untilCorrect = settings.untilCorrectMode;
   const [queue, setQueue] = useState<ShuffledQuestion[]>([]);
@@ -39,6 +42,8 @@ export default function QuizView() {
 
   const loadQuiz = useCallback(async () => {
     if (!quizId) return;
+    pausedTotalMsRef.current = 0;
+    pauseStartedAtRef.current = null;
     setLoading(true);
     try {
       const [allQuizzes, allQs] = await Promise.all([
@@ -78,10 +83,23 @@ export default function QuizView() {
 
   useEffect(() => { setOptionFocusIndex(0); }, [currentIndex, queue[0]?.id]);
 
+  // Track how long the quiz has been paused so that time can be excluded from
+  // the timer. Declared before the timer effect so it runs first on resume.
+  useEffect(() => {
+    if (paused) {
+      if (pauseStartedAtRef.current === null) pauseStartedAtRef.current = Date.now();
+    } else if (pauseStartedAtRef.current !== null) {
+      pausedTotalMsRef.current += Date.now() - pauseStartedAtRef.current;
+      pauseStartedAtRef.current = null;
+    }
+  }, [paused]);
+
   useEffect(() => {
     if (!session.startTime || paused || finished) return;
     const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - (session.startTime ?? 0)) / 1000));
+      setElapsed(Math.floor(
+        (Date.now() - (session.startTime ?? 0) - pausedTotalMsRef.current) / 1000
+      ));
     }, 1000);
     return () => clearInterval(id);
   }, [session.startTime, paused, finished]);
